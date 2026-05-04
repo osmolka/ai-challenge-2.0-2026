@@ -23,15 +23,16 @@ const CATEGORIES: Category[] = ['Education', 'Public Speaking', 'University Part
 
 const ACTIVITY_TEMPLATES = [
   { prefix: '[LAB]', names: ['Lecture "Playwright Workshop Base 1"', 'Lecture "Playwright Workshop Base 2"', 'Lecture "Playwright Workshop Advanced 1"', 'Lecture "Playwright Workshop Advanced 2"', 'Workshop "React Fundamentals"', 'Workshop "TypeScript Deep Dive"', 'Lecture "Clean Code Practices"', 'Course "Testing Best Practices"', 'Bootcamp "Docker & Kubernetes"', 'Lecture "CI/CD Pipelines"'], category: 'Education' as Category, points: 16 },
-  { prefix: '[LAB]', names: ['Mentoring of Junior Developer', 'Mentoring of Trainee Engineer', 'Mentoring of Intern', 'Mentoring of New Hire', 'Mentoring of Graduate'], category: 'Education' as Category, points: 64 },
+  { prefix: '[LAB]', names: ['Mentoring of Junior Developer', 'Mentoring of Trainee Engineer', 'Mentoring of Intern', 'Mentoring of New Hire', 'Mentoring of Graduate'], category: 'Mentoring' as Category, points: 64 },
   { prefix: '[REG]', names: ['Offline Meetup "Quality Gates: Stop, Test, Go!"', 'Online Talk "Microservices Architecture"', 'Conference Talk "DevOps in Practice"', 'Webinar "Security in Modern Apps"', 'Meetup "Frontend Trends 2025"', 'Panel Discussion "AI in Software Engineering"'], category: 'Public Speaking' as Category, points: 64 },
   { prefix: '[UNI]', names: ['Guest Lecture at University', 'Student Project Review', 'Hackathon Judging', 'University Workshop', 'Career Day Presentation'], category: 'University Partner' as Category, points: 32 },
   { prefix: '[LAB]', names: ['Open Source Contribution to React', 'Open Source PR to TypeScript', 'Open Source Bug Fix', 'Open Source Feature Implementation'], category: 'Open Source' as Category, points: 48 },
 ];
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const ACTIVITY_YEARS = [2024, 2025, 2025];
 
-function randomDate(year = 2025): string {
+function randomDate(year = ACTIVITY_YEARS[Math.floor(Math.random() * ACTIVITY_YEARS.length)]): string {
   const month = Math.floor(Math.random() * 12);
   const day = Math.floor(Math.random() * 28) + 1;
   return `${String(day).padStart(2, '0')}-${MONTHS[month]}-${year}`;
@@ -93,7 +94,7 @@ function randomDept(): string {
 }
 
 function randomAvatar(seed: number): string {
-  return `https://api.dicebear.com/7.x/avataaars/svg?seed=${seed}&backgroundColor=b6e3f4,c0aede,d1d4f9,ffd5dc,ffdfbf`;
+  return `https://thispersondoesnotexist.com/image?seed=${seed}`;
 }
 
 function generateActivities(count: number, activityIdStart: number): Activity[] {
@@ -106,7 +107,7 @@ function generateActivities(count: number, activityIdStart: number): Activity[] 
       id: idCounter++,
       name: `${template.prefix} ${actName}`,
       category: template.category,
-      date: randomDate(2025),
+      date: randomDate(),
       points: template.points,
     });
   }
@@ -166,7 +167,22 @@ export const employees: Employee[] = Array.from({ length: 227 }, (_, i) => {
 
 export const YEARS = ['All Years', '2025'];
 export const QUARTERS = ['All Quarters', 'Q1', 'Q2', 'Q3', 'Q4'];
-export const CATEGORY_FILTERS = ['All Categories', 'Education', 'Public Speaking', 'University Partner', 'Mentoring', 'Open Source'];
+export const CATEGORY_FILTERS = ['All Categories', ...CATEGORIES];
+
+function calculateFilteredScore(employee: Employee, filteredActivities: Activity[]): number {
+  if (filteredActivities.length === employee.activities.length) {
+    return employee.totalScore;
+  }
+
+  const totalPoints = employee.activities.reduce((sum, activity) => sum + activity.points, 0);
+  const filteredPoints = filteredActivities.reduce((sum, activity) => sum + activity.points, 0);
+
+  if (filteredPoints === 0 || totalPoints === 0) {
+    return 0;
+  }
+
+  return Math.max(1, Math.round((employee.totalScore * filteredPoints) / totalPoints));
+}
 
 export function filterEmployees(
   emps: Employee[],
@@ -175,27 +191,46 @@ export function filterEmployees(
   category: string,
   search: string
 ): Employee[] {
-  return emps.filter(emp => {
-    if (search && !emp.name.toLowerCase().includes(search.toLowerCase())) return false;
+  const normalizedSearch = search.trim().toLowerCase();
+  const hasActivityFilters = year !== 'All Years' || quarter !== 'All Quarters' || category !== 'All Categories';
+  const quarterNumber = quarter !== 'All Quarters' ? Number(quarter.replace('Q', '')) : null;
 
-    let filteredActs = emp.activities;
+  return emps
+    .map(employee => {
+      const searchableText = `${employee.name} ${employee.title} ${employee.department}`.toLowerCase();
 
-    if (year !== 'All Years') {
-      filteredActs = filteredActs.filter(a => a.date.endsWith(year));
-    }
-    if (quarter !== 'All Quarters') {
-      const qNum = parseInt(quarter[1]);
-      filteredActs = filteredActs.filter(a => {
-        const monthStr = a.date.split('-')[1];
-        const monthIdx = MONTHS.indexOf(monthStr);
-        return Math.floor(monthIdx / 3) + 1 === qNum;
+      if (normalizedSearch && !searchableText.includes(normalizedSearch)) {
+        return null;
+      }
+
+      const filteredActivities = employee.activities.filter(activity => {
+        if (year !== 'All Years' && !activity.date.endsWith(year)) {
+          return false;
+        }
+
+        if (quarterNumber !== null && getQuarter(activity.date) !== quarterNumber) {
+          return false;
+        }
+
+        if (category !== 'All Categories' && activity.category !== category) {
+          return false;
+        }
+
+        return true;
       });
-    }
-    if (category !== 'All Categories') {
-      filteredActs = filteredActs.filter(a => a.category === category);
-    }
 
-    return filteredActs.length > 0 || (year === 'All Years' && quarter === 'All Quarters' && category === 'All Categories');
-  });
+      if (hasActivityFilters && filteredActivities.length === 0) {
+        return null;
+      }
+
+      return {
+        ...employee,
+        activities: filteredActivities,
+        categoryCounts: buildCategoryCounts(filteredActivities),
+        totalScore: calculateFilteredScore(employee, filteredActivities),
+      };
+    })
+    .filter((employee): employee is Employee => employee !== null)
+    .sort((left, right) => right.totalScore - left.totalScore || left.name.localeCompare(right.name));
 }
 
