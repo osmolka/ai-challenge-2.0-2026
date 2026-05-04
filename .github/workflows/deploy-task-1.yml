@@ -42,21 +42,15 @@ jobs:
         env:
           PUBLIC_URL: /${{ github.event.repository.name }}/task-1
 
-     - name: Upload artifact
-  uses: actions/upload-pages-artifact@v3
-  with:
-    path: 'task-1/build'
-    retention-days: 1
+      - name: Create deployment structure
+        run: |
+          mkdir -p deployment/task-1
+          cp -r task-1/build/* deployment/task-1/
 
-- name: Create subdirectory structure
-  run: |
-    mkdir -p _site/task-1
-    cp -r task-1/build/* _site/task-1/
-
-- name: Upload to Pages
-  uses: actions/upload-pages-artifact@v3
-  with:
-    path: '_site'
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: 'deployment'
 
   deploy:
     needs: build
